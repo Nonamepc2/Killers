@@ -1,0 +1,700 @@
+//var Color = importNamespace('PixelCombats.ScriptingApi.Structures');
+//var System = importNamespace('System');
+
+// ���������
+var WaitingPlayersTime = 10;
+var BuildBaseTime = 60;
+var GameModeTime = 1200;
+var EndOfMatchTime = 10;
+var InfTimer = 1; //время бесконечного таймера
+var myJust = 0;
+var myBluePlayers = 0; //количество людей
+var myGameState = 0; //состояние игры
+var myAllPlayers = 0; //количество всех игроков
+var myGameStarted = 0; //старт игры
+var myBlockGameLoad = 0;
+var WeaponAreasTag = "wp";
+var myRedPlayers = 0;
+var myRedTeamBlock = 0;
+var myBluePlayersAlive = 0;
+// ��������� ����
+var WaitingStateValue = "Waiting";
+var BuildModeStateValue = "BuildMode";
+var GameStateValue = "Game";
+var EndOfMatchStateValue = "EndOfMatch";
+var myCount = Players.Count;
+var myInventoryBlock = 0;
+
+// ���������� ����������
+var mainTimer = Timers.GetContext().Get("Main");
+var myInfTimer = Timers.GetContext().Get("tim1");
+var myWpTimer = Timers.GetContext().Get("tim2");
+
+var myTimer3 = Timers.GetContext().Get("tim3");
+
+
+
+var stateProp = Properties.GetContext().Get("State");
+var weaponAreas = AreaService.GetByTag(WeaponAreasTag);
+
+// ��������� ��������� �������� �������
+Damage.FriendlyFire = GameMode.Parameters.GetBool("FriendlyFire");
+Map.Rotation = GameMode.Parameters.GetBool("MapRotation");
+BreackGraph.OnlyPlayerBlocksDmg = GameMode.Parameters.GetBool("PartialDesruction");
+BreackGraph.WeakBlocks = GameMode.Parameters.GetBool("LoosenBlocks");
+
+// ���� ������ ������ ������
+BreackGraph.PlayerBlockBoost = true;
+
+// ��������� ����
+Properties.GetContext().GameModeName.Value = "GameModes/Team Dead Match";
+TeamsBalancer.IsAutoBalance = false;
+Ui.GetContext().MainTimerId.Value = mainTimer.Id;
+// ������� �������
+Teams.Add("Blue", "ЛЮДИ", { b: 150 });
+Teams.Add("Red", "ЗОМБИ", { g : 150 });
+var blueTeam = Teams.Get("Blue");
+var redTeam = Teams.Get("Red");
+blueTeam.Spawns.SpawnPointsGroups.Add(1);
+redTeam.Spawns.SpawnPointsGroups.Add(2);
+blueTeam.Build.BlocksSet.Value = BuildBlocksSet.Blue;
+redTeam.Build.BlocksSet.Value = BuildBlocksSet.Red;
+
+// ������ ���� ������� ������
+
+// ������ ��� �������� � �����������
+LeaderBoard.PlayerLeaderBoardValues = [
+	{
+		Value: "Kills",
+		DisplayName: "Statistics/Kills",
+		ShortDisplayName: "Statistics/KillsShort"
+	},
+	{
+		Value: "Deaths",
+		DisplayName: "Statistics/Deaths",
+		ShortDisplayName: "Statistics/DeathsShort"
+	},
+	{
+		Value: "Spawns",
+		DisplayName: "Statistics/Spawns",
+		ShortDisplayName: "Statistics/SpawnsShort"
+	},
+	{
+		Value: "Scores",
+		DisplayName: "Statistics/Scores",
+		ShortDisplayName: "Statistics/ScoresShort"
+	}
+];
+LeaderBoard.TeamLeaderBoardValue = {
+	Value: "Deaths",
+	DisplayName: "Statistics\Deaths",
+	ShortDisplayName: "Statistics\Deaths"
+};
+// ��� ������� � ����������
+LeaderBoard.TeamWeightGetter.Set(function(team) {
+	return team.Properties.Get("Deaths").Value;
+});
+// ��� ������ � ����������
+LeaderBoard.PlayersWeightGetter.Set(function(player) {
+	return player.Properties.Get("Kills").Value;
+});
+
+// ������ ��� �������� ������
+
+Ui.GetContext().TeamProp2.Value = { Team: "Red", Prop: "Kills" };
+
+
+
+var spawnsView = AreaViewService.GetContext().Get("SpawnsView");spawnsView.Color = { r: 150, g: 150, b: 0 };
+spawnsView.Tags = [WeaponAreasTag];
+spawnsView.Enable = true;
+
+var weaponTrigger = AreaPlayerTriggerService.Get("WeaponTrigger");
+weaponTrigger.Tags = [WeaponAreasTag];
+weaponTrigger.Enable = true;
+weaponTrigger.OnEnter.Add(function (player) {
+	if (player.Inventory.Melee.Value)
+  {
+    player.Ui.Hint.Value = "ВЫ ЗОМБИ";
+  }
+  else
+  {
+    myWpTimer.Restart(180);
+    weaponTrigger.Enable = false;
+    spawnsView.Enable = false;
+    player.Inventory.Main.Value = false;
+    player.Inventory.Main.Value = true;
+  }
+});
+
+
+// ��������� ���� � ������� �� �������
+Teams.OnRequestJoinTeam.Add(function(player,team){
+
+  if (myGameState == 1)
+  {
+    redTeam.Add(player);
+    player.Spawns.Spawn();
+  }
+  else
+  {
+    team.Add(player)
+  }
+});
+// ����� �� ����� � �������
+Teams.OnPlayerChangeTeam.Add(function(player){ player.Spawns.Spawn()});
+
+// ������ ������� ����������� ����� ������
+
+// ����� ������ ������ ������ �������� ���� ������ � �������
+
+;
+// ���� � ������� ���������� ������� ���������� �� ��������� ����
+
+
+// ������� �������
+Spawns.OnSpawn.Add(function(player) {
+	++player.Properties.Spawns.Value;
+  player.Inventory.Main.Value = false;
+  if (myInventoryBlocked == 1)
+  {
+    player.Inventory.Build.Value = false;
+  }
+});
+// ������� �������
+Damage.OnDeath.Add(function(player) {
+  ++player.Properties.Deaths.Value;
+});
+// ������� �������
+Damage.OnKill.Add(function(player, killed) {
+	if (killed.Team != null && killed.Team != player.Team) {
+		++player.Properties.Kills.Value;
+		player.Properties.Scores.Value += 100;
+	}
+  if (myGameState == 1)
+  {
+    redTeam.Add(killed);
+  }
+});
+
+//таймеры
+
+myInfTimer.OnTimer.Add(function()
+{
+  myInfTimer.Restart(InfTimer);
+  myBluePlayersAlive =
+blueTeam.GetAlivePlayersCount();
+  if (myGameState == 1)
+  {
+    if (myBluePlayersAlive
+== 0)
+
+    {
+      InfTimer = 1000;
+      myInfTimer.Stop();
+      SetEndOfMatchMode();
+    }
+  }
+  if (myGameState != 1)
+  {
+    if (myCount > 1) 
+    {
+      if (stateProp.Value != BuildModeStateValue)
+      {
+        if (stateProp.Value != GameStateValue)
+        {
+          SetBuildMode();
+        }
+      }
+    }
+  }
+  if (myGameState == 1)
+  {
+    if (myRedPlayers == 0)
+    {
+      InfTimer = 1000;
+      myInfTimer.Stop();
+      SetEndOfMatchMode();
+    }  
+  }
+
+  myCount = Players.Count;
+  myRedPlayers
+= Teams.Get("Red").Count;
+
+ myBluePlayers
+= Teams.Get("Blue").Count;
+
+  if (myRedPlayers > 0)
+  {
+    myRedTeamBlock = 1;
+  }
+  else
+  {
+    myRedTeamBlock = 2;
+  }
+});
+
+myTimer3.OnTimer.Add(function()
+{
+  myInventoryBlock = 1;
+  myGameState = 1;
+  myRedTeamBlock = 1;
+});
+
+
+
+
+// ��������� ������������ �������
+mainTimer.OnTimer.Add(function() {
+	switch (stateProp.Value) {
+	case WaitingStateValue:
+		SetWaitingMode();
+		break;
+	case BuildModeStateValue:
+		SetGameMode();
+		break;
+	case GameStateValue:
+		SetEndOfMatchMode();
+		break;
+	case EndOfMatchStateValue:
+		RestartGame();
+		break;
+	}
+});
+
+// ������ ������ ������� ���������
+SetWaitingMode();
+
+// ��������� ����
+function SetWaitingMode() {
+	stateProp.Value = WaitingStateValue;
+	Ui.GetContext().Hint.Value = "НУЖНО БОЛЬШЕ ДВУХ ИГРОКОВ";
+  myInfTimer.Restart(InfTimer);
+  weaponTrigger.Enable = false;
+  spawnsView.Enable = false;
+  var inventory = Inventory.GetContext();
+	inventory.Main.Value = false;
+
+  inventory.Secondary.Value = false;
+	        
+  inventory.Melee.Value = false;
+  inventory.Explosive.Value = false;
+ 	inventory.Build.Value = false;
+	Spawns.GetContext().enable = true;
+	mainTimer.Restart(WaitingPlayersTime);
+}
+
+function SetBuildMode() 
+{
+	stateProp.Value = BuildModeStateValue;
+	Ui.GetContext().Hint.Value = "ОЖИДАЙТЕ";
+	var inventory = Inventory.GetContext();
+	inventory.Main.Value = false;
+	inventory.Secondary.Value = false;
+	inventory.Melee.Value = false;
+	inventory.Explosive.Value = false;
+	inventory.Build.Value = false;
+
+	mainTimer.Restart(BuildBaseTime);
+	Spawns.GetContext().enable = true;
+	SpawnTeams();
+}
+function SetGameMode() 
+{
+	stateProp.Value = GameStateValue;
+	Ui.GetContext().Hint.Value = "РЕЖИМ ОТ justToxiC";
+  myTimer3.Restart(3);
+
+  weaponTrigger.Enable = true;
+  spawnsView.Enable = true;
+	var inventory = Inventory.GetContext();
+	if (GameMode.Parameters.GetBool("OnlyKnives")) {
+		inventory.Main.Value = false;
+		inventory.Secondary.Value = false;
+		inventory.Melee.Value = true;
+		inventory.Explosive.Value = false;
+		inventory.Build.Value = true;
+	} else {
+	  redTeam.Inventory.Main.Value = false;
+    inventory.Secondary.Value = false;
+	  redTeam.Inventory.Melee.Value = true;
+	  inventory.Explosive.Value = false;
+	  blueTeam.Inventory.Build.Value = true;
+	}
+
+	mainTimer.Restart(GameModeTime);
+	Spawns.GetContext().Despawn();
+	SpawnTeams();
+}
+function SetEndOfMatchMode() {
+	stateProp.Value = EndOfMatchStateValue;
+	Ui.GetContext().Hint.Value = "Hint/EndOfMatch";
+
+	var spawns = Spawns.GetContext();
+	spawns.enable = false;
+	spawns.Despawn();
+	Game.GameOver(LeaderBoard.GetTeams());
+	mainTimer.Restart(EndOfMatchTime);
+}
+function RestartGame() {
+	Game.RestartGame();
+}
+
+function SpawnTeams() {
+	var e = Teams.GetEnumerator();
+	while (e.moveNext()) {
+		Spawns.GetContext(e.Current).Spawn();
+	}
+}
+
+//var Color = importNamespace('PixelCombats.ScriptingApi.Structures');
+//var System = importNamespace('System');
+
+// ���������
+var WaitingPlayersTime = 10;
+var BuildBaseTime = 60;
+var GameModeTime = 1200;
+var EndOfMatchTime = 10;
+var InfTimer = 1; //время бесконечного таймера
+var myJust = 0;
+var myBluePlayers = 0; //количество людей
+var myGameState = 0; //состояние игры
+var myAllPlayers = 0; //количество всех игроков
+var myGameStarted = 0; //старт игры
+var myBlockGameLoad = 0;
+var WeaponAreasTag = "wp";
+var myRedPlayers = 0;
+var myRedTeamBlock = 0;
+var myBluePlayersAlive = 0;
+// ��������� ����
+var WaitingStateValue = "Waiting";
+var BuildModeStateValue = "BuildMode";
+var GameStateValue = "Game";
+var EndOfMatchStateValue = "EndOfMatch";
+var myCount = Players.Count;
+var myInventoryBlock = 0;
+
+// ���������� ����������
+var mainTimer = Timers.GetContext().Get("Main");
+var myInfTimer = Timers.GetContext().Get("tim1");
+var myWpTimer = Timers.GetContext().Get("tim2");
+
+var myTimer3 = Timers.GetContext().Get("tim3");
+
+
+
+var stateProp = Properties.GetContext().Get("State");
+var weaponAreas = AreaService.GetByTag(WeaponAreasTag);
+
+// ��������� ��������� �������� �������
+Damage.FriendlyFire = GameMode.Parameters.GetBool("FriendlyFire");
+Map.Rotation = GameMode.Parameters.GetBool("MapRotation");
+BreackGraph.OnlyPlayerBlocksDmg = GameMode.Parameters.GetBool("PartialDesruction");
+BreackGraph.WeakBlocks = GameMode.Parameters.GetBool("LoosenBlocks");
+
+// ���� ������ ������ ������
+BreackGraph.PlayerBlockBoost = true;
+
+// ��������� ����
+Properties.GetContext().GameModeName.Value = "GameModes/Team Dead Match";
+TeamsBalancer.IsAutoBalance = false;
+Ui.GetContext().MainTimerId.Value = mainTimer.Id;
+// ������� �������
+Teams.Add("Blue", "ЛЮДИ", { b: 150 });
+Teams.Add("Red", "ЗОМБИ", { g : 150 });
+var blueTeam = Teams.Get("Blue");
+var redTeam = Teams.Get("Red");
+blueTeam.Spawns.SpawnPointsGroups.Add(1);
+redTeam.Spawns.SpawnPointsGroups.Add(2);
+blueTeam.Build.BlocksSet.Value = BuildBlocksSet.Blue;
+redTeam.Build.BlocksSet.Value = BuildBlocksSet.Red;
+
+// ������ ���� ������� ������
+
+// ������ ��� �������� � �����������
+LeaderBoard.PlayerLeaderBoardValues = [
+	{
+		Value: "Kills",
+		DisplayName: "Statistics/Kills",
+		ShortDisplayName: "Statistics/KillsShort"
+	},
+	{
+		Value: "Deaths",
+		DisplayName: "Statistics/Deaths",
+		ShortDisplayName: "Statistics/DeathsShort"
+	},
+	{
+		Value: "Spawns",
+		DisplayName: "Statistics/Spawns",
+		ShortDisplayName: "Statistics/SpawnsShort"
+	},
+	{
+		Value: "Scores",
+		DisplayName: "Statistics/Scores",
+		ShortDisplayName: "Statistics/ScoresShort"
+	}
+];
+LeaderBoard.TeamLeaderBoardValue = {
+	Value: "Deaths",
+	DisplayName: "Statistics\Deaths",
+	ShortDisplayName: "Statistics\Deaths"
+};
+// ��� ������� � ����������
+LeaderBoard.TeamWeightGetter.Set(function(team) {
+	return team.Properties.Get("Deaths").Value;
+});
+// ��� ������ � ����������
+LeaderBoard.PlayersWeightGetter.Set(function(player) {
+	return player.Properties.Get("Kills").Value;
+});
+
+// ������ ��� �������� ������
+
+Ui.GetContext().TeamProp2.Value = { Team: "Red", Prop: "Kills" };
+
+
+
+var spawnsView = AreaViewService.GetContext().Get("SpawnsView");spawnsView.Color = { r: 150, g: 150, b: 0 };
+spawnsView.Tags = [WeaponAreasTag];
+spawnsView.Enable = true;
+
+var weaponTrigger = AreaPlayerTriggerService.Get("WeaponTrigger");
+weaponTrigger.Tags = [WeaponAreasTag];
+weaponTrigger.Enable = true;
+weaponTrigger.OnEnter.Add(function (player) {
+	if (player.Inventory.Melee.Value)
+  {
+    player.Ui.Hint.Value = "ВЫ ЗОМБИ";
+  }
+  else
+  {
+    myWpTimer.Restart(180);
+    weaponTrigger.Enable = false;
+    spawnsView.Enable = false;
+    player.Inventory.Main.Value = false;
+    player.Inventory.Main.Value = true;
+  }
+});
+
+
+// ��������� ���� � ������� �� �������
+Teams.OnRequestJoinTeam.Add(function(player,team){
+
+  if (myGameState == 1)
+  {
+    redTeam.Add(player);
+    player.Spawns.Spawn();
+  }
+  else
+  {
+    team.Add(player)
+  }
+});
+// ����� �� ����� � �������
+Teams.OnPlayerChangeTeam.Add(function(player){ player.Spawns.Spawn()});
+
+// ������ ������� ����������� ����� ������
+
+// ����� ������ ������ ������ �������� ���� ������ � �������
+
+;
+// ���� � ������� ���������� ������� ���������� �� ��������� ����
+
+
+// ������� �������
+Spawns.OnSpawn.Add(function(player) {
+	++player.Properties.Spawns.Value;
+  player.Inventory.Main.Value = false;
+  if (myInventoryBlocked == 1)
+  {
+    player.Inventory.Build.Value = false;
+  }
+});
+// ������� �������
+Damage.OnDeath.Add(function(player) {
+  ++player.Properties.Deaths.Value;
+});
+// ������� �������
+Damage.OnKill.Add(function(player, killed) {
+	if (killed.Team != null && killed.Team != player.Team) {
+		++player.Properties.Kills.Value;
+		player.Properties.Scores.Value += 100;
+	}
+  if (myGameState == 1)
+  {
+    redTeam.Add(killed);
+  }
+});
+
+//таймеры
+
+myInfTimer.OnTimer.Add(function()
+{
+  myInfTimer.Restart(InfTimer);
+  myBluePlayersAlive =
+blueTeam.GetAlivePlayersCount();
+  if (myGameState == 1)
+  {
+    if (myBluePlayersAlive
+== 0)
+
+    {
+      InfTimer = 1000;
+      myInfTimer.Stop();
+      SetEndOfMatchMode();
+    }
+  }
+  if (myGameState != 1)
+  {
+    if (myCount > 1) 
+    {
+      if (stateProp.Value != BuildModeStateValue)
+      {
+        if (stateProp.Value != GameStateValue)
+        {
+          SetBuildMode();
+        }
+      }
+    }
+  }
+  if (myGameState == 1)
+  {
+    if (myRedPlayers == 0)
+    {
+      InfTimer = 1000;
+      myInfTimer.Stop();
+      SetEndOfMatchMode();
+    }  
+  }
+
+  myCount = Players.Count;
+  myRedPlayers
+= Teams.Get("Red").Count;
+
+ myBluePlayers
+= Teams.Get("Blue").Count;
+
+  if (myRedPlayers > 0)
+  {
+    myRedTeamBlock = 1;
+  }
+  else
+  {
+    myRedTeamBlock = 2;
+  }
+});
+
+myTimer3.OnTimer.Add(function()
+{
+  myInventoryBlock = 1;
+  myGameState = 1;
+  myRedTeamBlock = 1;
+});
+
+
+
+
+// ��������� ������������ �������
+mainTimer.OnTimer.Add(function() {
+	switch (stateProp.Value) {
+	case WaitingStateValue:
+		SetWaitingMode();
+		break;
+	case BuildModeStateValue:
+		SetGameMode();
+		break;
+	case GameStateValue:
+		SetEndOfMatchMode();
+		break;
+	case EndOfMatchStateValue:
+		RestartGame();
+		break;
+	}
+});
+
+// ������ ������ ������� ���������
+SetWaitingMode();
+
+// ��������� ����
+function SetWaitingMode() {
+	stateProp.Value = WaitingStateValue;
+	Ui.GetContext().Hint.Value = "НУЖНО БОЛЬШЕ ДВУХ ИГРОКОВ";
+  myInfTimer.Restart(InfTimer);
+  weaponTrigger.Enable = false;
+  spawnsView.Enable = false;
+  var inventory = Inventory.GetContext();
+	inventory.Main.Value = false;
+
+  inventory.Secondary.Value = false;
+	        
+  inventory.Melee.Value = false;
+  inventory.Explosive.Value = false;
+ 	inventory.Build.Value = false;
+	Spawns.GetContext().enable = true;
+	mainTimer.Restart(WaitingPlayersTime);
+}
+
+function SetBuildMode() 
+{
+	stateProp.Value = BuildModeStateValue;
+	Ui.GetContext().Hint.Value = "ОЖИДАЙТЕ";
+	var inventory = Inventory.GetContext();
+	inventory.Main.Value = false;
+	inventory.Secondary.Value = false;
+	inventory.Melee.Value = false;
+	inventory.Explosive.Value = false;
+	inventory.Build.Value = false;
+
+	mainTimer.Restart(BuildBaseTime);
+	Spawns.GetContext().enable = true;
+	SpawnTeams();
+}
+function SetGameMode() 
+{
+	stateProp.Value = GameStateValue;
+	Ui.GetContext().Hint.Value = "РЕЖИМ ОТ justToxiC";
+  myTimer3.Restart(3);
+
+  weaponTrigger.Enable = true;
+  spawnsView.Enable = true;
+	var inventory = Inventory.GetContext();
+	if (GameMode.Parameters.GetBool("OnlyKnives")) {
+		inventory.Main.Value = false;
+		inventory.Secondary.Value = false;
+		inventory.Melee.Value = true;
+		inventory.Explosive.Value = false;
+		inventory.Build.Value = true;
+	} else {
+	  redTeam.Inventory.Main.Value = false;
+    inventory.Secondary.Value = false;
+	  redTeam.Inventory.Melee.Value = true;
+	  inventory.Explosive.Value = false;
+	  blueTeam.Inventory.Build.Value = true;
+	}
+
+	mainTimer.Restart(GameModeTime);
+	Spawns.GetContext().Despawn();
+	SpawnTeams();
+}
+function SetEndOfMatchMode() {
+	stateProp.Value = EndOfMatchStateValue;
+	Ui.GetContext().Hint.Value = "Hint/EndOfMatch";
+
+	var spawns = Spawns.GetContext();
+	spawns.enable = false;
+	spawns.Despawn();
+	Game.GameOver(LeaderBoard.GetTeams());
+	mainTimer.Restart(EndOfMatchTime);
+}
+function RestartGame() {
+	Game.RestartGame();
+}
+
+function SpawnTeams() {
+	var e = Teams.GetEnumerator();
+	while (e.moveNext()) {
+		Spawns.GetContext(e.Current).Spawn();
+	}
+}
+
